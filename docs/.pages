@@ -1,9 +1,0 @@
-nav:
-  - index.md
-  - Tutorial
-  - Functions
-  - Plugins
-  - Guides
-  - FAQ
-
-collapse_single_pages: true
