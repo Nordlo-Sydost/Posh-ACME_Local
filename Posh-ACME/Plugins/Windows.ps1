@@ -12,15 +12,21 @@ function Add-DnsTxt {
         [Parameter(Position=3)]
         [pscredential]$WinCred,
         [switch]$WinUseSSL,
+        [switch]$WinSkipCACheck,
         [string]$WinZoneScope,
+        [switch]$WinNoCimSession,
         [Parameter(ValueFromRemainingArguments)]
         $ExtraParams
     )
 
-    $cim = Connect-WinDns @PSBoundParameters
-    Write-Verbose "Connected to $WinServer"
-
-    $dnsParams = @{ ComputerName=$WinServer; CimSession=$cim }
+    if ($WinNoCimSession) {
+        Write-Verbose "Using local DnsServer module"
+        $dnsParams = @{ ComputerName=$WinServer }
+    } else {
+        $cim = Connect-WinDns @PSBoundParameters
+        Write-Verbose "Connected to $WinServer"
+        $dnsParams = @{ ComputerName=$WinServer; CimSession=$cim }
+    }
 
     Write-Debug "Attempting to find zone for $RecordName"
     if (!($zoneName = Find-WinZone $RecordName $dnsParams)) {
@@ -82,8 +88,14 @@ function Add-DnsTxt {
     .PARAMETER WinUseSSL
         Forces the PowerShell remoting session to run over HTTPS. Requires the server have a valid certificate that is installed and trusted by the client or added to the client's TrustedHosts list. This is primarily used when connecting to a non-domain joined DNS server.
 
+    .PARAMETER WinSkipCACheck
+        Enables the SkipCACheck session option which causes the client to not validate that the server certificate is signed by a trusted certification authority (CA).
+
     .PARAMETER WinZoneScope
         The name of the zone scope to modify. This is generally only necessary in split-brain DNS configurations where the default scope is not external facing.
+
+    .PARAMETER WinNoCimSession
+        Indicates that the script should not use CIM sessions for DNS commandlets.
 
     .PARAMETER ExtraParams
         This parameter can be ignored and is only used to prevent errors when splatting with more parameters than this function supports.
@@ -112,15 +124,21 @@ function Remove-DnsTxt {
         [Parameter(Position=3)]
         [pscredential]$WinCred,
         [switch]$WinUseSSL,
+        [switch]$WinSkipCACheck,
         [string]$WinZoneScope,
+        [switch]$WinNoCimSession,
         [Parameter(ValueFromRemainingArguments)]
         $ExtraParams
     )
 
-    $cim = Connect-WinDns @PSBoundParameters
-    Write-Verbose "Connected to $WinServer"
-
-    $dnsParams = @{ ComputerName=$WinServer; CimSession=$cim }
+    if ($WinNoCimSession) {
+        Write-Verbose "Using local DnsServer module"
+        $dnsParams = @{ ComputerName=$WinServer }
+    } else {
+        $cim = Connect-WinDns @PSBoundParameters
+        Write-Verbose "Connected to $WinServer"
+        $dnsParams = @{ ComputerName=$WinServer; CimSession=$cim }
+    }
 
     Write-Debug "Attempting to find zone for $RecordName"
     if (!($zoneName = Find-WinZone $RecordName $dnsParams)) {
@@ -183,8 +201,14 @@ function Remove-DnsTxt {
     .PARAMETER WinUseSSL
         Forces the PowerShell remoting session to run over HTTPS. Requires the server have a valid certificate that is installed and trusted by the client or added to the client's TrustedHosts list. This is primarily used when connecting to a non-domain joined DNS server.
 
+    .PARAMETER WinSkipCACheck
+        Enables the SkipCACheck session option which causes the client to not validate that the server certificate is signed by a trusted certification authority (CA).
+
     .PARAMETER WinZoneScope
         The name of the zone scope to modify. This is generally only necessary in split-brain DNS configurations where the default scope is not external facing.
+
+    .PARAMETER WinNoCimSession
+        Indicates that the script should not use CIM sessions for the DNS commandlets.
 
     .PARAMETER ExtraParams
         This parameter can be ignored and is only used to prevent errors when splatting with more parameters than this function supports.
@@ -231,16 +255,12 @@ function Connect-WinDns {
         [Parameter(Position=1)]
         [pscredential]$WinCred,
         [switch]$WinUseSSL,
+        [switch]$WinSkipCACheck,
         [Parameter(ValueFromRemainingArguments)]
         $ExtraConnectParams
     )
 
     # make sure required modules are available
-    if ($null -eq (Get-Module -ListAvailable 'DnsServer' -Verbose:$false)) {
-        throw "DnsServer module was not found and is required to use this plugin."
-    } else {
-        Import-Module 'DnsServer' -Verbose:$false
-    }
     if ($null -eq (Get-Module -ListAvailable 'CimCmdlets' -Verbose:$false)) {
         throw "CimCmdlets module was not found and is required to use this plugin."
     } else {
@@ -255,10 +275,12 @@ function Connect-WinDns {
         Write-Debug "Connecting to $WinServer"
         $cimParams = @{ ComputerName=$WinServer }
         if ($WinCred) { $cimParams.Credential = $WinCred }
-        if ($WinUseSSL) { $cimParams.SessionOption = (New-CimSessionOption -UseSsl) }
+        $sessionOpts = @{}
+        if ($WinUseSSL) { $sessionOpts.UseSsl = $true }
+        if ($WinSkipCACheck) { $sessionOpts.SkipCACheck = $true }
+        $cimParams.SessionOption = New-CimSessionOption @sessionOpts
         return (New-CimSession @cimParams)
     }
-
 }
 
 function Find-WinZone {
@@ -269,6 +291,13 @@ function Find-WinZone {
         [Parameter(Mandatory,Position=1)]
         [hashtable]$DnsParams
     )
+
+    # make sure required modules are available
+    if ($null -eq (Get-Module -ListAvailable 'DnsServer' -Verbose:$false)) {
+        throw "DnsServer module was not found and is required to use this plugin."
+    } else {
+        Import-Module 'DnsServer' -Verbose:$false
+    }
 
     # setup a module variable to cache the record to zone mapping
     # so it's quicker to find later

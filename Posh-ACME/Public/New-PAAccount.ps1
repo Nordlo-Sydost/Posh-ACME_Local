@@ -32,6 +32,13 @@ function New-PAAccount {
         catch { $PSCmdlet.ThrowTerminatingError($_) }
     }
 
+    # Remove the Contact param if necessary
+    if ($server.IgnoreContact -and 'Contact' -in $PSBoundParameters.Keys) {
+        Write-Debug "Ignoring explicit Contact parameter."
+        $null = $PSBoundParameters.Remove('Contact')
+        $Contact = $null
+    }
+
     # make sure the external account binding parameters were specified if this ACME
     # server requires them.
     if (-not $OnlyReturnExisting -and $server.meta -and $server.meta.externalAccountRequired -and
@@ -59,8 +66,6 @@ function New-PAAccount {
                 $Contact[$_] = "mailto:$($Contact[$_])"
             }
         }
-    } else {
-        Write-Warning "No email contacts specified for this account. Certificate expiration warnings will not be sent unless you add at least one with Set-PAAccount."
     }
 
     if ('Generate' -eq $PSCmdlet.ParameterSetName) {

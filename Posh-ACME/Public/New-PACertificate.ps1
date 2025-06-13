@@ -38,8 +38,7 @@ function New-PACertificate {
         [Parameter(ParameterSetName='FromScratch')]
         [string]$PfxPass='poshacme',
         [Parameter(ParameterSetName='FromScratch')]
-        [ValidateScript({Test-SecureStringNotNullOrEmpty $_ -ThrowOnFail})]
-        [securestring]$PfxPassSecure,
+        [securestring]$PfxPassSecure=[Net.NetworkCredential]::new('','poshacme').SecurePassword,
         [Parameter(ParameterSetName='FromScratch')]
         [switch]$UseModernPfxEncryption,
         [Parameter(ParameterSetName='FromScratch')]
@@ -57,7 +56,7 @@ function New-PACertificate {
     $psbKeys = $PSBoundParameters.Keys
 
     if ('PfxPass' -in $psbKeys) {
-        if ($PfxPassSecure) {
+        if ('PfxPassSecure' -in $psbKeys) {
             # Warn that PfxPassSecure takes precedence over PfxPass if both are specified.
             Write-Warning "PfxPass and PfxPassSecure were both specified. Using value from PfxPassSecure."
         } else {
@@ -75,7 +74,15 @@ function New-PACertificate {
     if ('DirectoryUrl' -in $psbKeys -or -not (Get-PAServer -Refresh)) {
         Set-PAServer -DirectoryUrl $DirectoryUrl
     }
-    Write-Verbose "Using ACME Server $($script:Dir.location)"
+    $server = Get-PAServer
+    Write-Verbose "Using ACME Server $($server.location)"
+
+    # Remove the Contact param if necessary
+    if ($server.IgnoreContact -and 'Contact' -in $PSBoundParameters.Keys) {
+        Write-Debug "Ignoring explicit Contact parameter."
+        $null = $PSBoundParameters.Remove('Contact')
+        $Contact = $null
+    }
 
     # Make sure we have an account set. If Contact and/or AccountKeyLength
     # were specified and don't match the current one but do match a different,
